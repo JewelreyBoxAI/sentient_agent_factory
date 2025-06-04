@@ -21,16 +21,6 @@ services:
           type: web
           name: sentient-ai-backend
           property: port
-      - key: CLERK_SECRET_KEY
-        value: "REPLACE_WITH_YOUR_CLERK_SECRET_KEY"
-      - key: CLERK_PUBLISHABLE_KEY
-        value: "REPLACE_WITH_YOUR_CLERK_PUBLISHABLE_KEY"
-      - key: JWT_SECRET
-        value: "REPLACE_WITH_A_RANDOM_32_CHAR_STRING"
-      - key: OPENAI_API_KEY
-        value: "REPLACE_WITH_YOUR_OPENAI_API_KEY"
-      - key: ALLOWED_ORIGINS
-        value: "http://localhost:3000,REPLACE_WITH_YOUR_VERCEL_URL"
       - key: LOG_LEVEL
         value: INFO
       - key: FAISS_INDEX_PATH
