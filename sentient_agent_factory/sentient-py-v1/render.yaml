@@ -6,6 +6,7 @@ services:
     startCommand: "poetry run uvicorn main:app --host 0.0.0.0 --port $PORT"
     plan: free
     envVars:
+      # ===== SYSTEM SETTINGS (DO NOT CHANGE) =====
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: POETRY_VERSION
@@ -21,16 +22,28 @@ services:
           type: web
           name: sentient-ai-backend
           property: port
+      
+      # ===== CREDENTIALS TO REPLACE =====
+      # 1. Get from https://clerk.dev -> API Keys
       - key: CLERK_SECRET_KEY
-        value: "REPLACE_WITH_YOUR_CLERK_SECRET_KEY"
+        value: "sk_test_PASTE_YOUR_CLERK_SECRET_KEY_HERE"
       - key: CLERK_PUBLISHABLE_KEY
-        value: "REPLACE_WITH_YOUR_CLERK_PUBLISHABLE_KEY"
-      - key: JWT_SECRET
-        value: "REPLACE_WITH_A_RANDOM_32_CHAR_STRING"
+        value: "pk_test_PASTE_YOUR_CLERK_PUBLISHABLE_KEY_HERE"
+      
+      # 2. Get from https://platform.openai.com/api-keys
       - key: OPENAI_API_KEY
-        value: "REPLACE_WITH_YOUR_OPENAI_API_KEY"
+        value: "sk-proj_PASTE_YOUR_OPENAI_API_KEY_HERE"
+      
+      # 3. Any random string (use this one or make your own)
+      - key: JWT_SECRET
+        value: "sentient_ai_production_jwt_secret_2024_secure_random_key_xyz789"
+      
+      # ===== FRONTEND CONNECTION =====
+      # 4. After deploying frontend, replace YOUR_VERCEL_APP_URL
       - key: ALLOWED_ORIGINS
-        value: "http://localhost:3000,REPLACE_WITH_YOUR_VERCEL_URL"
+        value: "http://localhost:3000,https://YOUR_VERCEL_APP_URL.vercel.app"
+      
+      # ===== APP SETTINGS (DO NOT CHANGE) =====
       - key: LOG_LEVEL
         value: INFO
       - key: FAISS_INDEX_PATH
