@@ -17,12 +17,17 @@ class Settings(BaseSettings):
     DIRECT_DATABASE_URL: Optional[str] = Field(default=None)
     
     # OpenAI (Required)
-    OPENAI_API_KEY: str = Field(...)
+    OPENAI_API_KEY: str = Field(default="sk-test-placeholder")
     
     # Authentication (Optional for prototype)
     CLERK_SECRET_KEY: str = Field(default="")
     CLERK_PUBLISHABLE_KEY: str = Field(default="")
     JWT_SECRET: str = Field(default="dev_jwt_secret")
+    
+    # Cloudinary Configuration
+    CLOUDINARY_CLOUD_NAME: str = Field(default="ddbjhqnuk")
+    CLOUDINARY_API_KEY: str = Field(default="711243612821432")
+    CLOUDINARY_API_SECRET: str = Field(default="")
     
     # Redis (Optional)
     REDIS_URL: str = Field(default="redis://localhost:6379")

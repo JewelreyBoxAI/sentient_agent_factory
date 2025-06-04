@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from src.api.routes import chat, companion, auth
+from src.api.routes import chat, companion, auth, upload
 from src.config.settings import get_settings
 from src.config.database import init_db
 
@@ -50,10 +50,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers (they already have prefixes defined)
-app.include_router(chat.router, tags=["chat"])
+# Include routers
+app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(companion.router, tags=["companions"])
 app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(upload.router, prefix="/api", tags=["upload"])
 
 @app.get("/")
 async def root():

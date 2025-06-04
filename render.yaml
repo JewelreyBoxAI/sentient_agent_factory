@@ -23,27 +23,11 @@ services:
           name: sentient-ai-backend
           property: port
       
-      # ===== CREDENTIALS TO REPLACE =====
-      # 1. Get from https://clerk.dev -> API Keys
-      - key: CLERK_SECRET_KEY
-        value: "sk_test_PASTE_YOUR_CLERK_SECRET_KEY_HERE"
-      - key: CLERK_PUBLISHABLE_KEY
-        value: "pk_test_PASTE_YOUR_CLERK_PUBLISHABLE_KEY_HERE"
+      # ===== SECURE CREDENTIALS (SET IN RENDER DASHBOARD) =====
+      # These will be set securely in Render's Environment Variables section
+      # Go to: Render Dashboard → Your Service → Environment → Add Environment Variable
       
-      # 2. Get from https://platform.openai.com/api-keys
-      - key: OPENAI_API_KEY
-        value: "sk-proj_PASTE_YOUR_OPENAI_API_KEY_HERE"
-      
-      # 3. Any random string (use this one or make your own)
-      - key: JWT_SECRET
-        value: "sentient_ai_production_jwt_secret_2024_secure_random_key_xyz789"
-      
-      # ===== FRONTEND CONNECTION =====
-      # 4. After deploying frontend, replace YOUR_VERCEL_APP_URL
-      - key: ALLOWED_ORIGINS
-        value: "http://localhost:3000,https://YOUR_VERCEL_APP_URL.vercel.app"
-      
-      # ===== APP SETTINGS (DO NOT CHANGE) =====
+      # ===== APP SETTINGS =====
       - key: LOG_LEVEL
         value: INFO
       - key: FAISS_INDEX_PATH
@@ -57,4 +41,14 @@ services:
     disk:
       name: sentient-data
       mountPath: /opt/render/project/src/data
-      sizeGB: 1 
+      sizeGB: 1
+
+# ===== IMPORTANT SECURITY NOTE =====
+# Add these environment variables securely in Render Dashboard:
+# 
+# CLERK_SECRET_KEY = sk_test_your_actual_key
+# CLERK_PUBLISHABLE_KEY = pk_test_your_actual_key  
+# OPENAI_API_KEY = sk-proj_your_actual_key
+# CLOUDINARY_API_SECRET = your_cloudinary_api_secret
+# JWT_SECRET = any_random_secure_string
+# ALLOWED_ORIGINS = http://localhost:3000,https://your-app.vercel.app 

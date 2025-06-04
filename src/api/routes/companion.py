@@ -3,14 +3,17 @@ Companion CRUD API Routes
 Frontend-compatible endpoints for AI character management
 """
 import uuid
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from pydantic import BaseModel, Field
 
 from ...config.database import get_db
 from ...models.companion import Companion, Category
+from ...services.auth import get_current_user
+from ...services.cloudinary import upload_avatar
 
 router = APIRouter(prefix="/companions", tags=["companions"])
 
@@ -40,7 +43,6 @@ class CompanionCreate(BaseModel):
     short_description: str = Field(min_length=1, max_length=500)
     character_description: dict = Field(default={})
     category_id: str
-    src: str = Field(description="Avatar image URL")
     personality_traits: PersonalityTraits = Field(default_factory=PersonalityTraits)
     moderation_settings: ModerationSettings = Field(default_factory=ModerationSettings)
 
@@ -68,19 +70,8 @@ class CompanionResponse(BaseModel):
     src: str
     created_at: str
     updated_at: str
-    
-    # Personality traits
-    humor: int
-    empathy: int
-    assertiveness: int
-    sarcasm: int
-    
-    # Moderation settings
-    hate_moderation: int
-    harassment_moderation: int
-    violence_moderation: int
-    self_harm_moderation: int
-    sexual_moderation: int
+    personality_traits: PersonalityTraits
+    moderation_settings: ModerationSettings
     
     @classmethod
     def from_db_model(cls, companion):
@@ -96,15 +87,19 @@ class CompanionResponse(BaseModel):
             src=companion.src,
             created_at=companion.created_at.isoformat(),
             updated_at=companion.updated_at.isoformat(),
-            humor=companion.humor,
-            empathy=companion.empathy,
-            assertiveness=companion.assertiveness,
-            sarcasm=companion.sarcasm,
-            hate_moderation=companion.hate_moderation,
-            harassment_moderation=companion.harassment_moderation,
-            violence_moderation=companion.violence_moderation,
-            self_harm_moderation=companion.self_harm_moderation,
-            sexual_moderation=companion.sexual_moderation
+            personality_traits=PersonalityTraits(
+                humor=companion.humor,
+                empathy=companion.empathy,
+                assertiveness=companion.assertiveness,
+                sarcasm=companion.sarcasm
+            ),
+            moderation_settings=ModerationSettings(
+                hate_moderation=companion.hate_moderation,
+                harassment_moderation=companion.harassment_moderation,
+                violence_moderation=companion.violence_moderation,
+                self_harm_moderation=companion.self_harm_moderation,
+                sexual_moderation=companion.sexual_moderation
+            )
         )
 
 
@@ -189,15 +184,15 @@ async def get_companions(
 @router.get("/{companion_id}", response_model=CompanionResponse)
 async def get_companion(
     companion_id: str,
-    user_id: str = Query(..., description="User ID for authorization"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ):
-    """Get a specific companion"""
+    """Get specific companion by ID"""
     try:
         result = await db.execute(
             select(Companion).where(
                 and_(
-                    Companion.id == companion_id,
+                    Companion.id == uuid.UUID(companion_id),
                     Companion.user_id == user_id
                 )
             )
@@ -208,57 +203,89 @@ async def get_companion(
             raise HTTPException(status_code=404, detail="Companion not found")
         
         return CompanionResponse.from_db_model(companion)
-    except HTTPException:
-        raise
+        
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch companion: {str(e)}")
 
 
 @router.post("/", response_model=CompanionResponse)
-async def create_companion(
-    companion_data: CompanionCreate,
-    user_id: str = Query(..., description="User ID"),
-    user_name: str = Query(..., description="User name"),
-    db: AsyncSession = Depends(get_db)
+async def create_companion_with_avatar(
+    name: str = Form(...),
+    short_description: str = Form(...),
+    character_description: str = Form(default="{}"),
+    category_id: str = Form(...),
+    humor: int = Form(default=3, ge=1, le=5),
+    empathy: int = Form(default=3, ge=1, le=5),
+    assertiveness: int = Form(default=3, ge=1, le=5),
+    sarcasm: int = Form(default=3, ge=1, le=5),
+    hate_moderation: int = Form(default=3, ge=1, le=5),
+    harassment_moderation: int = Form(default=3, ge=1, le=5),
+    violence_moderation: int = Form(default=3, ge=1, le=5),
+    self_harm_moderation: int = Form(default=3, ge=1, le=5),
+    sexual_moderation: int = Form(default=3, ge=1, le=5),
+    avatar_file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ):
-    """Create a new companion"""
+    """
+    Create new companion with avatar upload
+    
+    Professional multipart/form-data endpoint that:
+    1. Validates all companion data
+    2. Uploads avatar to Cloudinary with optimizations
+    3. Creates companion with Cloudinary URL
+    4. Returns complete companion object
+    """
     try:
-        # Verify category exists
-        result = await db.execute(select(Category).where(Category.id == companion_data.category_id))
+        # 1. Validate category exists
+        result = await db.execute(
+            select(Category).where(Category.id == uuid.UUID(category_id))
+        )
         category = result.scalar_one_or_none()
-        
         if not category:
-            raise HTTPException(status_code=400, detail="Category not found")
+            raise HTTPException(status_code=404, detail="Category not found")
         
-        # Create companion
-        companion = Companion(
+        # 2. Upload avatar to Cloudinary
+        cloudinary_result = await upload_avatar(avatar_file, user_id, name)
+        avatar_url = cloudinary_result["url"]
+        
+        # 3. Parse character description JSON
+        try:
+            import json
+            character_desc = json.loads(character_description)
+        except:
+            character_desc = {"description": character_description}
+        
+        # 4. Create companion with Cloudinary URL
+        new_companion = Companion(
             user_id=user_id,
-            user_name=user_name,
-            name=companion_data.name,
-            short_description=companion_data.short_description,
-            character_description=companion_data.character_description,
-            category_id=companion_data.category_id,
-            src=companion_data.src,
-            humor=companion_data.personality_traits.humor,
-            empathy=companion_data.personality_traits.empathy,
-            assertiveness=companion_data.personality_traits.assertiveness,
-            sarcasm=companion_data.personality_traits.sarcasm,
-            hate_moderation=companion_data.moderation_settings.hate_moderation,
-            harassment_moderation=companion_data.moderation_settings.harassment_moderation,
-            violence_moderation=companion_data.moderation_settings.violence_moderation,
-            self_harm_moderation=companion_data.moderation_settings.self_harm_moderation,
-            sexual_moderation=companion_data.moderation_settings.sexual_moderation
+            user_name="User",  # TODO: Get from Clerk
+            name=name,
+            short_description=short_description,
+            character_description=character_desc,
+            category_id=uuid.UUID(category_id),
+            src=avatar_url,  # Cloudinary URL
+            humor=humor,
+            empathy=empathy,
+            assertiveness=assertiveness,
+            sarcasm=sarcasm,
+            hate_moderation=hate_moderation,
+            harassment_moderation=harassment_moderation,
+            violence_moderation=violence_moderation,
+            self_harm_moderation=self_harm_moderation,
+            sexual_moderation=sexual_moderation
         )
         
-        db.add(companion)
+        db.add(new_companion)
         await db.commit()
-        await db.refresh(companion)
+        await db.refresh(new_companion)
         
-        return CompanionResponse.from_db_model(companion)
-    except HTTPException:
-        raise
+        return CompanionResponse.from_db_model(new_companion)
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create companion: {str(e)}")
 
 
@@ -266,8 +293,8 @@ async def create_companion(
 async def update_companion(
     companion_id: str,
     companion_data: CompanionUpdate,
-    user_id: str = Query(..., description="User ID for authorization"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ):
     """Update a companion"""
     try:
@@ -275,7 +302,7 @@ async def update_companion(
         result = await db.execute(
             select(Companion).where(
                 and_(
-                    Companion.id == companion_id,
+                    Companion.id == uuid.UUID(companion_id),
                     Companion.user_id == user_id
                 )
             )
@@ -290,16 +317,18 @@ async def update_companion(
         
         for field, value in update_data.items():
             if field == "personality_traits" and value:
-                companion.humor = value.get("humor", companion.humor)
-                companion.empathy = value.get("empathy", companion.empathy)
-                companion.assertiveness = value.get("assertiveness", companion.assertiveness)
-                companion.sarcasm = value.get("sarcasm", companion.sarcasm)
+                companion.humor = value.humor
+                companion.empathy = value.empathy
+                companion.assertiveness = value.assertiveness
+                companion.sarcasm = value.sarcasm
             elif field == "moderation_settings" and value:
-                companion.hate_moderation = value.get("hate_moderation", companion.hate_moderation)
-                companion.harassment_moderation = value.get("harassment_moderation", companion.harassment_moderation)
-                companion.violence_moderation = value.get("violence_moderation", companion.violence_moderation)
-                companion.self_harm_moderation = value.get("self_harm_moderation", companion.self_harm_moderation)
-                companion.sexual_moderation = value.get("sexual_moderation", companion.sexual_moderation)
+                companion.hate_moderation = value.hate_moderation
+                companion.harassment_moderation = value.harassment_moderation
+                companion.violence_moderation = value.violence_moderation
+                companion.self_harm_moderation = value.self_harm_moderation
+                companion.sexual_moderation = value.sexual_moderation
+            elif field == "category_id" and value:
+                companion.category_id = uuid.UUID(value)
             else:
                 setattr(companion, field, value)
         
@@ -307,8 +336,8 @@ async def update_companion(
         await db.refresh(companion)
         
         return CompanionResponse.from_db_model(companion)
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        raise e
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update companion: {str(e)}")
@@ -317,16 +346,15 @@ async def update_companion(
 @router.delete("/{companion_id}")
 async def delete_companion(
     companion_id: str,
-    user_id: str = Query(..., description="User ID for authorization"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
 ):
-    """Delete a companion"""
+    """Delete companion"""
     try:
-        # Get existing companion
         result = await db.execute(
             select(Companion).where(
                 and_(
-                    Companion.id == companion_id,
+                    Companion.id == uuid.UUID(companion_id),
                     Companion.user_id == user_id
                 )
             )
@@ -336,12 +364,13 @@ async def delete_companion(
         if not companion:
             raise HTTPException(status_code=404, detail="Companion not found")
         
+        # TODO: Delete from Cloudinary as well
         await db.delete(companion)
         await db.commit()
         
         return {"message": "Companion deleted successfully"}
-    except HTTPException:
-        raise
+        
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete companion: {str(e)}") 

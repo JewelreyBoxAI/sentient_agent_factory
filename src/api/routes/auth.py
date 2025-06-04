@@ -26,7 +26,7 @@ async def get_current_user(
 ):
     """Get current user info"""
     try:
-        user = AuthService.get_current_user(
+        user = AuthService.get_current_user_info(
             credentials.credentials if credentials else None
         )
         return UserResponse(**user)
